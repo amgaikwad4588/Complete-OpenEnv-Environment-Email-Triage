@@ -1,0 +1,183 @@
+name: email-triage-env
+version: "1.0.0"
+description: >
+  Customer Support Email Triage: A realistic environment where AI agents
+  read, classify, prioritise, and respond to support emails using tool calls.
+  Tasks range from basic classification to complex incident management with
+  VIP customers, press inquiries, and policy compliance requirements.
+author: "hackathon-submission"
+license: MIT
+tags:
+  - openenv
+  - customer-support
+  - email-triage
+  - nlp
+  - real-world
+  - incident-management
+
+tasks:
+  - id: easy
+    name: "Email Classification"
+    description: >
+      Classify 5 support emails by category and priority. No tools required.
+      Tests basic understanding of support request types.
+    difficulty: easy
+    max_steps: 15
+    scoring: >
+      Category accuracy (0.50) + priority accuracy (0.30) +
+      all emails read (0.10) + completion bonus (0.10)
+
+  - id: medium
+    name: "Tool-Assisted Response Drafting"
+    description: >
+      Handle 3 support emails requiring account/order lookups via tools.
+      Agent must use the correct tools and craft accurate, empathetic responses.
+    difficulty: medium
+    max_steps: 30
+    scoring: >
+      Per-email: category + priority + tool usage + response quality keyword checks.
+      Efficiency bonus for completing in ≤18 steps.
+
+  - id: hard
+    name: "Incident Management Workflow"
+    description: >
+      Manage 10 emails during an active platform outage. Includes VIP customers,
+      a press inquiry (CRITICAL: no internal technical details), duplicate tickets,
+      an angry customer, and unrelated non-outage tickets requiring separation.
+    difficulty: hard
+    max_steps: 60
+    scoring: >
+      Priority accuracy (0.20) + duplicate detection (0.10) + VIP handling (0.15) +
+      escalation correctness (0.15) + non-outage separation (0.10) +
+      response quality (0.15) + policy compliance (0.15) + completion (0.10) +
+      efficiency bonus (0.05). Policy violation for sharing technical details with
+      press incurs -0.30 penalty.
+
+observation_space:
+  type: object
+  description: >
+    Current environment state including inbox summary, full email content
+    (after read_email), available tools, last tool result, and processing status.
+  properties:
+    task_id:
+      type: string
+      description: "Current task ID"
+    step:
+      type: integer
+      description: "Current step number"
+    max_steps:
+      type: integer
+      description: "Episode step limit"
+    inbox_summary:
+      type: array
+      description: "List of email summaries with status, category, priority"
+    current_email:
+      type: object
+      nullable: true
+      description: "Full email content after read_email; null otherwise"
+    available_tools:
+      type: array
+      description: "Tool definitions callable via use_tool action"
+    last_tool_result:
+      type: object
+      nullable: true
+      description: "Result from most recent tool call"
+    email_statuses:
+      type: object
+      description: "Map of email_id to current status"
+    classified_as:
+      type: object
+      description: "Map of email_id to assigned category"
+    priorities:
+      type: object
+      description: "Map of email_id to assigned priority"
+    message:
+      type: string
+      description: "Human-readable result of the last action"
+    done:
+      type: boolean
+    score:
+      type: number
+      description: "Running cumulative score estimate (0.0-1.0)"
+
+action_space:
+  type: object
+  description: >
+    Email management action. Set action_type and relevant fields.
+    All non-applicable fields should be null.
+  required:
+    - action_type
+  properties:
+    action_type:
+      type: string
+      enum:
+        - read_email
+        - classify_email
+        - set_priority
+        - use_tool
+        - draft_response
+        - send_response
+        - escalate
+        - resolve
+        - mark_duplicate
+    email_id:
+      type: string
+      nullable: true
+    category:
+      type: string
+      nullable: true
+      enum: [shipping, billing, technical, refund, general, outage, press]
+    priority:
+      type: string
+      nullable: true
+      enum: [low, medium, high, urgent]
+    tool_name:
+      type: string
+      nullable: true
+    tool_params:
+      type: object
+      nullable: true
+    response_text:
+      type: string
+      nullable: true
+    escalation_team:
+      type: string
+      nullable: true
+      enum: [engineering, billing, legal, pr, vip_support, senior_support]
+    escalation_reason:
+      type: string
+      nullable: true
+    duplicate_of:
+      type: string
+      nullable: true
+
+api:
+  reset:
+    method: POST
+    path: /reset
+    body: '{"task_id": "easy"}'
+    returns: session_id + initial observation
+  step:
+    method: POST
+    path: /step
+    headers: "X-Session-ID: <session_id>"
+    body: Action JSON
+    returns: observation + reward + done + info
+  state:
+    method: GET
+    path: /state
+    headers: "X-Session-ID: <session_id>"
+    returns: current observation
+  tasks:
+    method: GET
+    path: /tasks
+    returns: task list + Action JSON schema
+  grader:
+    method: GET
+    path: /grader
+    headers: "X-Session-ID: <session_id>"
+    returns: score + breakdown + feedback
+  baseline:
+    method: POST
+    path: /baseline
+    returns: heuristic baseline scores for all 3 tasks
