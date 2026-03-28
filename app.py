@@ -213,7 +213,7 @@ async def health() -> dict:
 
 @app.post("/reset", response_model=ResetResponse, summary="Reset or start an episode")
 async def reset(
-    request: ResetRequest,
+    request: Optional[ResetRequest] = None,
     x_session_id: Optional[str] = Header(default=None),
 ) -> ResetResponse:
     """
@@ -224,6 +224,8 @@ async def reset(
 
     Returns `session_id` — include this in `X-Session-ID` header for all subsequent calls.
     """
+    if request is None:
+        request = ResetRequest()
     if request.task_id not in TASK_REGISTRY:
         raise HTTPException(
             status_code=400,
