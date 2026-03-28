@@ -201,13 +201,75 @@ def _require_session(session_id: str | None, endpoint: str) -> tuple[str, EmailT
 # Endpoints
 # ---------------------------------------------------------------------------
 
+@app.get("/")
+async def root() -> dict:
+    """Root endpoint — confirms the environment is running."""
+    return {
+        "environment": "Email Triage OpenEnv",
+        "version": "1.0.0",
+        "status": "ok",
+        "endpoints": ["/reset", "/step", "/state", "/tasks", "/grader", "/baseline", "/health", "/docs"],
+    }
+
+
 @app.get("/health")
 async def health() -> dict:
     """Health check — returns 200 with server status."""
     return {
-        "status": "ok",
+        "status": "healthy",
         "active_sessions": len(store),
         "tasks": list(TASK_REGISTRY.keys()),
+    }
+
+
+@app.get("/metadata")
+async def metadata() -> dict:
+    """Environment metadata — name and description (required by OpenEnv spec)."""
+    return {
+        "name": "email-triage-env",
+        "description": (
+            "Customer Support Email Triage: A realistic environment where AI agents "
+            "read, classify, prioritise, and respond to support emails using tool calls. "
+            "Tasks range from basic classification to complex incident management with "
+            "VIP customers, press inquiries, and policy compliance requirements."
+        ),
+        "version": "1.0.0",
+        "author": "hackathon-submission",
+        "tags": ["openenv", "customer-support", "email-triage", "nlp", "real-world"],
+    }
+
+
+@app.get("/schema")
+async def schema() -> dict:
+    """
+    Returns JSON schemas for action, observation, and state models.
+    Required by OpenEnv runtime validation.
+    """
+    return {
+        "action": Action.model_json_schema(),
+        "observation": Observation.model_json_schema(),
+        "state": Observation.model_json_schema(),
+    }
+
+
+@app.post("/mcp")
+async def mcp(body: dict | None = None) -> dict:
+    """
+    MCP (Model Context Protocol) JSON-RPC 2.0 endpoint.
+    Required by OpenEnv runtime validation.
+    """
+    return {
+        "jsonrpc": "2.0",
+        "result": {
+            "name": "email-triage-env",
+            "version": "1.0.0",
+            "tools": [
+                {"name": "reset", "description": "Reset environment for a task"},
+                {"name": "step", "description": "Take one action in the environment"},
+                {"name": "state", "description": "Get current observation"},
+            ],
+        },
+        "id": (body or {}).get("id"),
     }
 
 
