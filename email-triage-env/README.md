@@ -1,6 +1,6 @@
 ---
 title: Email Triage Env
-emoji: 📧
+emoji: mail
 colorFrom: blue
 colorTo: purple
 sdk: docker
@@ -10,4 +10,4 @@ license: mit
 
 # Email Triage OpenEnv
 
-A customer support email triage environment for training and evaluating AI agents. Agents must read, classify, prioritise, and respond to support emails across three difficulty levels.
+A customer support email triage environment for training and evaluating AI agents.
