@@ -10,6 +10,7 @@ MANDATORY
 - The inference script must be named `inference.py` and placed in the root directory of the project
 - Participants must use OpenAI Client for all LLM calls using above variables
 """
+
 from __future__ import annotations
 
 import json
@@ -28,7 +29,9 @@ from openai import OpenAI
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
-MODEL_NAME = os.getenv("MODEL_NAME")
+MODEL_NAME = os.getenv(
+    "MODEL_NAME", "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
+)
 
 ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:7860").rstrip("/")
 SEED = 42
@@ -76,6 +79,7 @@ Only include fields relevant to the action. All other fields should be null or o
 # Observation formatter
 # ---------------------------------------------------------------------------
 
+
 def format_observation(obs: dict[str, Any]) -> str:
     """Convert observation dict to a clear natural-language prompt."""
     lines = [
@@ -99,28 +103,40 @@ def format_observation(obs: dict[str, Any]) -> str:
         }.get(email["status"], "[?]")
         cat = f" [{email.get('category', '?')}]" if email.get("category") else ""
         pri = f" {email.get('priority', '?').upper()}" if email.get("priority") else ""
-        tier = f" ({email['customer_tier']})" if email["customer_tier"] != "standard" else ""
+        tier = (
+            f" ({email['customer_tier']})"
+            if email["customer_tier"] != "standard"
+            else ""
+        )
         lines.append(
             f"  {status_icon} {email['email_id']}{tier}: {email['subject']}{cat}{pri}"
         )
 
     if obs.get("current_email"):
         e = obs["current_email"]
-        tier_note = f" [{e['customer_tier'].upper()} CUSTOMER]" if e["customer_tier"] != "standard" else ""
-        lines.extend([
-            f"\n--- CURRENT EMAIL: {e['email_id']}{tier_note} ---",
-            f"From: {e['from_address']}",
-            f"Subject: {e['subject']}",
-            f"Received: {e.get('received_at', 'unknown')}",
-            f"Body:\n{e['body']}",
-        ])
+        tier_note = (
+            f" [{e['customer_tier'].upper()} CUSTOMER]"
+            if e["customer_tier"] != "standard"
+            else ""
+        )
+        lines.extend(
+            [
+                f"\n--- CURRENT EMAIL: {e['email_id']}{tier_note} ---",
+                f"From: {e['from_address']}",
+                f"Subject: {e['subject']}",
+                f"Received: {e.get('received_at', 'unknown')}",
+                f"Body:\n{e['body']}",
+            ]
+        )
 
     if obs.get("last_tool_result"):
         tr = obs["last_tool_result"]
-        lines.extend([
-            f"\n--- TOOL RESULT ({tr.get('tool', 'unknown')}) ---",
-            json.dumps(tr.get("result", {}), indent=2),
-        ])
+        lines.extend(
+            [
+                f"\n--- TOOL RESULT ({tr.get('tool', 'unknown')}) ---",
+                json.dumps(tr.get("result", {}), indent=2),
+            ]
+        )
 
     if obs.get("available_tools"):
         tool_names = [t["name"] for t in obs["available_tools"]]
@@ -133,6 +149,7 @@ def format_observation(obs: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # Episode runner
 # ---------------------------------------------------------------------------
+
 
 def run_episode(client: OpenAI, task_id: str, verbose: bool = False) -> dict[str, Any]:
     """Run a single episode for a task using the LLM agent."""
@@ -152,9 +169,7 @@ def run_episode(client: OpenAI, task_id: str, verbose: bool = False) -> dict[str
         print(f"\n[{task_id}] Session: {session_id}")
         print(f"[{task_id}] Starting episode with {len(obs['inbox_summary'])} emails")
 
-    conversation: list[dict[str, str]] = [
-        {"role": "system", "content": SYSTEM_PROMPT}
-    ]
+    conversation: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     step_count = 0
     done = obs.get("done", False)
@@ -179,21 +194,25 @@ def run_episode(client: OpenAI, task_id: str, verbose: bool = False) -> dict[str
                 if attempt == MAX_RETRIES - 1:
                     raise
                 print(f"  LLM call failed (attempt {attempt + 1}): {exc}")
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
 
         try:
             action_dict = json.loads(action_text)
         except json.JSONDecodeError:
             match = re.search(r"\{.*\}", action_text, re.DOTALL)
-            action_dict = json.loads(match.group()) if match else {"action_type": "resolve"}
+            action_dict = (
+                json.loads(match.group()) if match else {"action_type": "resolve"}
+            )
 
         conversation.append({"role": "assistant", "content": action_text})
 
         if verbose:
-            print(f"  Step {step_count + 1}: {action_dict.get('action_type')} "
-                  f"email={action_dict.get('email_id')} "
-                  f"cat={action_dict.get('category')} "
-                  f"tool={action_dict.get('tool_name')}")
+            print(
+                f"  Step {step_count + 1}: {action_dict.get('action_type')} "
+                f"email={action_dict.get('email_id')} "
+                f"cat={action_dict.get('category')} "
+                f"tool={action_dict.get('tool_name')}"
+            )
 
         step_resp = httpx.post(
             f"{ENV_BASE_URL}/step",
@@ -242,12 +261,10 @@ def run_episode(client: OpenAI, task_id: str, verbose: bool = False) -> dict[str
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     if not API_KEY:
         print("ERROR: HF_TOKEN environment variable not set", file=sys.stderr)
-        sys.exit(1)
-    if not MODEL_NAME:
-        print("ERROR: MODEL_NAME environment variable not set", file=sys.stderr)
         sys.exit(1)
 
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
@@ -259,12 +276,15 @@ def main() -> None:
         print(f"Server OK: {ENV_BASE_URL}")
     except Exception as exc:
         print(f"ERROR: Cannot reach server at {ENV_BASE_URL}: {exc}", file=sys.stderr)
-        print("Start the server with: uvicorn app:app --host 0.0.0.0 --port 7860", file=sys.stderr)
+        print(
+            "Start the server with: uvicorn app:app --host 0.0.0.0 --port 7860",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     results = []
     for task_id in ["easy", "medium", "hard"]:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Running task: {task_id.upper()}")
         print("=" * 60)
         try:
@@ -272,25 +292,29 @@ def main() -> None:
             results.append(result)
         except Exception as exc:
             print(f"ERROR on task {task_id}: {exc}", file=sys.stderr)
-            results.append({
-                "task_id": task_id,
-                "score": 0.0,
-                "passed": False,
-                "steps_taken": 0,
-                "grader_breakdown": {},
-                "feedback": [str(exc)],
-                "error": str(exc),
-            })
+            results.append(
+                {
+                    "task_id": task_id,
+                    "score": 0.0,
+                    "passed": False,
+                    "steps_taken": 0,
+                    "grader_breakdown": {},
+                    "feedback": [str(exc)],
+                    "error": str(exc),
+                }
+            )
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("INFERENCE RESULTS SUMMARY")
     print("=" * 60)
     print(f"{'Task':<12} {'Score':>8} {'Passed':>8} {'Steps':>8}")
     print("-" * 40)
     for r in results:
         status = "PASS" if r["passed"] else "FAIL"
-        print(f"{r['task_id']:<12} {r['score']:>8.4f} {status:>8} {r['steps_taken']:>8}")
+        print(
+            f"{r['task_id']:<12} {r['score']:>8.4f} {status:>8} {r['steps_taken']:>8}"
+        )
 
     avg = sum(r["score"] for r in results) / len(results) if results else 0
     print(f"\nAverage score: {avg:.4f}")
